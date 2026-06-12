@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Fallas de Luminarias ALUMBRADO IMC</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  body, html { height: 100%; margin: 0; padding: 0; background: #0f172a; color: #e2e8f0; overflow: hidden; }
+  
+  /* Colores del Logo solicitados */
+  .text-alumbrado { color: #7cb342; } 
+  .text-imc { color: #fbb005; }      
+  
+  /* Layout */
+  .app-container { display: flex; flex-direction: column; height: 100vh; width: 100vw; }
+  .main-content { flex: 1; display: flex; overflow: hidden; position: relative; }
+  #map { height: 100%; width: 100%; z-index: 1; background: #1e293b; }
+  
+  /* Estética */
+  .glass { background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.15); }
+  .scroll-y { overflow-y: auto; scrollbar-width: thin; scrollbar-color: #475569 transparent; }
+  .btn-primary { background: #3b82f6; transition: 0.3s; color: white; font-weight: bold; border-radius: 8px; }
+  .btn-primary:hover { background: #2563eb; }
+
+  /* Leyendas flotantes */
+  .legend-box { position: absolute; z-index: 1000; background: rgba(15, 23, 42, 0.95); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); font-size: 10px; pointer-events: none; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+  .legend-falla { bottom: 25px; left: 20px; }
+  .legend-situacion { bottom: 25px; right: 20px; max-width: 200px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .legend-color { width: 10px; height: 10px; border-radius: 50%; border: 1px solid white; flex-shrink: 0; }
+  .legend-dot-sit { width: 8px; height: 8px; background: #64748b; border-radius: 2px; }
+
+  /* Modales */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 5000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .modal-content { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 24px; width: 100%; max-width: 1000px; max-height: 90vh; overflow-y: auto; }
+  
+  .data-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+  .data-table th { background: rgba(59, 130, 246, 0.1); color: #94a3b8; padding: 10px; border-bottom: 1px solid #334155; }
+  .data-table td { padding: 10px; border-bottom: 1px solid #334155; }
+
+  .toast { position: fixed; top: 20px; right: 20px; z-index: 9999; padding: 12px 24px; border-radius: 8px; background: #10b981; color: white; font-weight: bold; box-shadow: 0 5px 15px rgba(0,0,0,0.3); transition: 0.3s; }
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="loginOverlay" class="fixed inset-0 z-[100000] bg-slate-900 flex items-center justify-center">
+    <div class="bg-slate-800 p-10 rounded-3xl border border-slate-700 w-96 shadow-2xl text-center">
+        <h1 class="text-3xl font-black uppercase tracking-tighter mb-2">
+            <span class="text-alumbrado">ALUMBRADO</span> <span class="text-imc">IMC</span>
+        </h1>
+        <p class="text-slate-500 text-sm mb-8">Sistema de Gestión de Fallas</p>
+        <form onsubmit="handleLogin(event)" class="space-y-4">
+            <input type="text" id="username" placeholder="Usuario" class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-white outline-none focus:border-lime-500">
+            <input type="password" id="password" placeholder="Contraseña" class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-white outline-none focus:border-lime-500">
+            <button type="submit" class="btn-primary w-full py-4 uppercase tracking-widest text-sm shadow-xl">Ingresar</button>
+        </form>
+        <p id="loginError" class="text-red-500 text-xs mt-4 hidden font-bold">⚠️ Credenciales incorrectas</p>
+    </div>
+</div>
+
+<!-- App Principal -->
+<div id="mainContent" class="hidden app-container">
+    <header class="header glass border-b border-slate-700/50 px-6 py-4 flex items-center justify-between z-20">
+        <div class="flex items-center gap-3">
+            <h1 class="text-2xl font-black tracking-tighter">
+                <span class="text-alumbrado">ALUMBRADO</span> <span class="text-imc">IMC</span>
+            </h1>
+            <div class="h-6 w-px bg-slate-700 mx-3"></div>
+            <p class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">USUARIO: <span id="headerUser" class="text-blue-400"></span></p>
+        </div>
+        <div class="flex gap-2">
+            <button id="btnAdmin" onclick="openAdminModal()" class="bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 px-3 py-2 rounded-lg text-[10px] font-bold hidden uppercase">ADMIN USUARIOS</button>
+            <button onclick="openChartsModal()" class="bg-indigo-600/20 text-indigo-400 border border-indigo-600/30 px-3 py-2 rounded-lg text-[10px] font-bold uppercase">ESTADÍSTICAS</button>
+            <button onclick="exportToPDF()" class="bg-amber-600/20 text-amber-400 border border-amber-600/30 px-3 py-2 rounded-lg text-[10px] font-bold uppercase">EXPORTAR PDF</button>
+            <button onclick="document.getElementById('fileInput').click()" class="btn-primary px-3 py-2 text-[10px] font-bold uppercase">CARGAR CSV</button>
+            <button onclick="logout()" class="bg-red-600/20 text-red-500 border border-red-600/30 px-3 py-2 rounded-lg text-[10px] font-bold uppercase">SALIR</button>
+            <input type="file" id="fileInput" accept=".csv" class="hidden" onchange="handleFile(event)">
+        </div>
+    </header>
+
+    <div class="main-content">
+        <!-- Sidebar Izquierda -->
+        <aside class="sidebar glass w-80 flex flex-col border-r border-slate-700/50 z-10">
+            <div class="p-4 border-b border-slate-700/50 grid grid-cols-2 gap-2 text-center">
+                <div class="bg-slate-800/50 p-2 rounded-lg border border-slate-700">
+                    <div class="text-[8px] text-slate-500 font-bold uppercase">Total</div>
+                    <div id="statTotal" class="text-xl font-black">0</div>
+                </div>
+                <div class="bg-red-500/10 p-2 rounded-lg border border-red-500/20">
+                    <div class="text-[8px] text-red-400 font-bold uppercase">Sin Energía</div>
+                    <div id="statNoEnergy" class="text-xl font-black text-red-500">0</div>
+                </div>
+            </div>
+            
+            <div class="p-4 space-y-3 bg-slate-900/10 border-b border-slate-700/50">
+                <input type="text" id="searchInput" placeholder="Buscar ID..." class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500">
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="space-y-1">
+                        <label class="text-[9px] text-slate-500 font-bold uppercase ml-1">Municipio</label>
+                        <select id="localidadFilter" class="w-full bg-slate-800 rounded-lg px-2 py-1.5 text-xs outline-none"><option value="all">TODOS</option></select>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[9px] text-slate-500 font-bold uppercase ml-1">Zona</label>
+                        <select id="zonaFilter" class="w-full bg-slate-800 rounded-lg px-2 py-1.5 text-xs outline-none"><option value="all">TODAS</option></select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="space-y-1">
+                        <label class="text-[9px] text-slate-500 font-bold uppercase ml-1">Tipo Falla</label>
+                        <select id="tipoFallaFilter" class="w-full bg-slate-800 rounded-lg px-2 py-1.5 text-xs outline-none"><option value="all">TODAS</option></select>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[9px] text-slate-500 font-bold uppercase ml-1">Situación</label>
+                        <select id="situacionFilter" class="w-full bg-slate-800 rounded-lg px-2 py-1.5 text-xs outline-none"><option value="all">TODAS</option></select>
+                    </div>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-[9px] text-slate-500 font-bold uppercase ml-1">Nº Cuenta</label>
+                    <select id="cuentaFilter" class="w-full bg-slate-800 rounded-lg px-2 py-1.5 text-xs outline-none"><option value="all">TODAS LAS CUENTAS</option></select>
+                </div>
+            </div>
+            <div class="flex-1 scroll-y p-2 space-y-2" id="errorList"></div>
+        </aside>
+
+        <!-- Mapa -->
+        <main class="flex-1 relative">
+            <div id="map"></div>
+            
+            <div class="legend-box legend-falla">
+                <div class="text-[9px] font-bold text-slate-400 mb-2 uppercase border-b border-slate-700 pb-1">Tipos de Falla</div>
+                <div id="legendFallas"></div>
+            </div>
+
+            <div class="legend-box legend-situacion">
+                <div class="text-[9px] font-bold text-slate-400 mb-2 uppercase border-b border-slate-700 pb-1">Situaciones Detectadas</div>
+                <div id="legendSituaciones"></div>
+            </div>
+        </main>
+
+        <!-- Detalle -->
+        <div id="detailPanel" class="hidden glass absolute right-0 top-0 bottom-0 w-80 z-[2000] p-6 shadow-2xl overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="font-bold text-xs uppercase">Detalle del Activo</h2>
+                <button onclick="closeDetailPanel()" class="text-white text-xl">✕</button>
+            </div>
+            <div id="detailContent" class="space-y-4"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Usuarios -->
+<div id="adminModal" class="modal-overlay hidden">
+    <div class="modal-content max-w-2xl">
+        <div class="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
+            <h2 class="text-xl font-bold">👥 Administración de Usuarios</h2>
+            <button onclick="closeAdminModal()" class="text-2xl">✕</button>
+        </div>
+        <div class="space-y-6">
+            <div class="bg-slate-900/50 p-4 rounded-xl border border-slate-700 grid grid-cols-2 gap-3">
+                <input type="text" id="newUserName" placeholder="Nombre de usuario" class="bg-slate-800 p-2 rounded text-sm text-white">
+                <input type="password" id="newUserPass" placeholder="Contraseña" class="bg-slate-800 p-2 rounded text-sm text-white">
+                <select id="newUserRole" class="bg-slate-800 p-2 rounded text-sm"><option value="user">Usuario (Lectura)</option><option value="admin">Administrador</option></select>
+                <button onclick="addUser()" class="btn-primary py-2 text-xs">CREAR USUARIO</button>
+            </div>
+            <table class="data-table">
+                <thead><tr><th>Usuario</th><th>Rol</th><th>Acciones</th></tr></thead>
+                <tbody id="userTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Estadísticas -->
+<div id="chartsModal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <div class="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
+            <h2 class="text-xl font-bold">📊 Estadísticas Críticas</h2>
+            <button onclick="closeChartsModal()" class="text-2xl">✕</button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="chart-card bg-slate-900/50 p-4 rounded-xl border border-slate-700">
+                <h3 class="text-slate-400 font-bold mb-4 uppercase text-xs">Municipios con Fallas</h3>
+                <div class="overflow-x-auto"><table class="data-table w-full"><thead id="statsHead"></thead><tbody id="municipioStatsBody"></tbody></table></div>
+            </div>
+            <div class="chart-card bg-slate-900/50 p-4 rounded-xl border border-slate-700">
+                <h3 class="text-slate-400 font-bold mb-4 uppercase text-xs">Tipos de Falla</h3>
+                <canvas id="chartErrorTypes"></canvas>
+            </div>
+            <div class="chart-card md:col-span-2 bg-slate-900/50 p-4 rounded-xl border border-slate-700">
+                <h3 class="text-slate-400 font-bold mb-4 uppercase text-xs">Fallas por Nº de Cuenta</h3>
+                <div class="max-h-60 overflow-y-auto"><table class="data-table w-full"><thead><tr><th>Cuenta</th><th>Activos</th><th>Acción</th></tr></thead><tbody id="groupedCuentasBody"></tbody></table></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toastContainer"></div>
+
+<script>
+// --- CONFIGURACIÓN DE USUARIOS ---
+let users = JSON.parse(localStorage.getItem('imc_users')) || [{ name: 'admin', pass: 'admin123', role: 'admin' }];
+let currentUser = null;
+let allData = [];
+let filteredData = [];
+let map = null;
+let markers = [];
+
+const FALLA_TYPES = {
+    'Sin energía': '#ef4444',
+    'OLC inaccesible': '#f97316',
+    'Equipo dañado': '#dc2626',
+    'GPS roto': '#eab308',
+    'Voltaje/Corriente': '#a855f7',
+    'Driver/Relé': '#ec4899',
+    'Error configuración': '#10b981',
+    'Otros': '#64748b'
+};
+
+// --- AUTH ---
+function handleLogin(e) {
+    e.preventDefault();
+    const u = document.getElementById('username').value.trim().toLowerCase();
+    const p = document.getElementById('password').value.trim();
+    const user = users.find(x => x.name.toLowerCase() === u && x.pass === p);
+    if(user) {
+        sessionStorage.setItem('imc_session', JSON.stringify(user));
+        enterApp(user);
+    } else {
+        document.getElementById('loginError').classList.remove('hidden');
+    }
+}
+
+function enterApp(user) {
+    currentUser = user;
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('mainContent').classList.remove('hidden');
+    document.getElementById('headerUser').textContent = user.name;
+    if(user.role === 'admin') document.getElementById('btnAdmin').classList.remove('hidden');
+    setTimeout(() => {
+        initMap();
+        if(map) map.invalidateSize();
+    }, 300);
+}
+
+function logout() { sessionStorage.clear(); location.reload(); }
+
+function openAdminModal() { document.getElementById('adminModal').classList.remove('hidden'); renderUserTable(); }
+function closeAdminModal() { document.getElementById('adminModal').classList.add('hidden'); }
+function renderUserTable() {
+    document.getElementById('userTableBody').innerHTML = users.map(u => `
+        <tr>
+            <td class="font-bold">${u.name}</td>
+            <td class="text-xs uppercase text-blue-400">${u.role}</td>
+            <td>
+                <button onclick="deleteUser('${u.name}')" class="text-red-500 mr-4 ${u.name==='admin'?'hidden':''}">Eliminar</button>
+                <button onclick="resetPass('${u.name}')" class="text-blue-500">Clave</button>
+            </td>
+        </tr>
+    `).join('');
+}
+function addUser() {
+    const n = document.getElementById('newUserName').value.trim();
+    const p = document.getElementById('newUserPass').value.trim();
+    const r = document.getElementById('newUserRole').value;
+    if(!n || !p) return;
+    users.push({name: n, pass: p, role: r});
+    localStorage.setItem('imc_users', JSON.stringify(users));
+    renderUserTable();
+}
+function deleteUser(n) { users = users.filter(x => x.name !== n); localStorage.setItem('imc_users', JSON.stringify(users)); renderUserTable(); }
+function resetPass(n) { const np = prompt("Nueva clave para " + n); if(np) { users.find(x => x.name === n).pass = np; localStorage.setItem('imc_users', JSON.stringify(users)); showToast("Actualizado"); } }
+
+// --- MAPA ---
+function initMap() {
+    if (map) return;
+    map = L.map('map').setView([-34.75, -56.0], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© IMC' }).addTo(map);
+    
+    document.getElementById('legendFallas').innerHTML = Object.entries(FALLA_TYPES).map(([name, color]) => `
+        <div class="legend-item"><span class="legend-color" style="background: ${color}"></span><span class="text-white">${name}</span></div>
+    `).join('');
+}
+
+// --- DATOS ---
+function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        const lines = ev.target.result.trim().split(/\r?\n/);
+        allData = [];
+        for (let i = 1; i < lines.length; i++) {
+            const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+            if (row.length < 13) continue;
+            let rawLat = row[7].replace(/"/g, '').replace(',', '.').trim();
+            let rawLng = row[8].replace(/"/g, '').replace(',', '.').trim();
+            const obj = {
+                'id': row[1].trim(), 'mensaje': row[2].trim(), 'fecha': row[3].trim(),
+                'external': row[6].trim(), 'lat': parseFloat(rawLat), 'lng': parseFloat(rawLng),
+                'localidad': (row[10] || "SIN MUNICIPIO").trim(), 
+                'zona': (row[11] || "SIN ZONA").trim(), 
+                'situacion': (row[12] || "NORMAL").trim(), 
+                'cuenta': row[13]?.replace(/"/g, '').trim() || '-'
+            };
+            obj.categoria = categorizeError(obj['mensaje']);
+            allData.push(obj);
+        }
+        filteredData = [...allData];
+        populateFilters();
+        applyFilters();
+        showToast('DATOS CARGADOS');
+    };
+    reader.readAsText(file);
+}
+
+function categorizeError(msg) {
+    const m = msg.toLowerCase();
+    if (m.includes('energía') || m.includes('power loss')) return { name: 'Sin energía', color: FALLA_TYPES['Sin energía'] };
+    if (m.includes('no está accesible') || m.includes('unreachable')) return { name: 'OLC inaccesible', color: FALLA_TYPES['OLC inaccesible'] };
+    if (m.includes('dañado') || m.includes('broken')) return { name: 'Equipo dañado', color: FALLA_TYPES['Equipo dañado'] };
+    if (m.includes('gps')) return { name: 'GPS roto', color: FALLA_TYPES['GPS roto'] };
+    if (m.includes('voltaje') || m.includes('corriente')) return { name: 'Voltaje/Corriente', color: FALLA_TYPES['Voltaje/Corriente'] };
+    if (m.includes('driver') || m.includes('relé')) return { name: 'Driver/Relé', color: FALLA_TYPES['Driver/Relé'] };
+    return { name: 'Otros', color: FALLA_TYPES['Otros'] };
+}
+
+function applyFilters() {
+    const s = document.getElementById('searchInput').value.toLowerCase();
+    const fLoc = document.getElementById('localidadFilter').value;
+    const fZona = document.getElementById('zonaFilter').value;
+    const fTipo = document.getElementById('tipoFallaFilter').value;
+    const fSit = document.getElementById('situacionFilter').value;
+    const fCue = document.getElementById('cuentaFilter').value;
+
+    filteredData = allData.filter(d => {
+        const mS = !s || d.external.toLowerCase().includes(s) || d.id.toLowerCase().includes(s);
+        const mL = fLoc === 'all' || d.localidad === fLoc;
+        const mZ = fZona === 'all' || d.zona === fZona;
+        const mT = fTipo === 'all' || d.categoria.name === fTipo;
+        const mSt = fSit === 'all' || d.situacion === fSit;
+        const mC = fCue === 'all' || d.cuenta === fCue;
+        return mS && mL && mZ && mT && mSt && mC;
+    });
+
+    document.getElementById('statTotal').textContent = filteredData.length;
+    document.getElementById('statNoEnergy').textContent = filteredData.filter(x => x.categoria.name === 'Sin energía').length;
+    
+    renderMarkers();
+    renderList();
+    updateSitLegend();
+}
+
+function renderMarkers() {
+    if(!map) return;
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+    const bounds = [];
+    filteredData.forEach(row => {
+        if (!isNaN(row.lat) && !isNaN(row.lng)) {
+            const m = L.circleMarker([row.lat, row.lng], {
+                radius: 7, fillColor: row.categoria.color, color: '#fff', weight: 1, fillOpacity: 0.9
+            }).addTo(map);
+            m.bindPopup(`<b>${row.external}</b><br>${row.categoria.name}<br>Cuenta: ${row.cuenta}`);
+            m.on('click', () => selectAsset(row.id));
+            markers.push(m);
+            bounds.push([row.lat, row.lng]);
+        }
+    });
+    if (bounds.length > 0) map.fitBounds(bounds, {padding: [50, 50], maxZoom: 16});
+}
+
+function renderList() {
+    const c = document.getElementById('errorList');
+    c.innerHTML = filteredData.slice(0, 100).map(row => `
+        <div class="p-3 bg-slate-800/40 rounded-lg mb-2 border-l-4" style="border-color: ${row.categoria.color}" onclick="selectAsset('${row.id}')">
+            <div class="flex justify-between text-[9px] mb-1">
+                <span class="text-blue-400 font-bold uppercase">${row.localidad}</span>
+                <span>${row.fecha.split(' ')[0]}</span>
+            </div>
+            <div class="text-sm font-bold">${row.external}</div>
+            <div class="text-[9px] font-medium" style="color: ${row.categoria.color}">${row.categoria.name}</div>
+        </div>
+    `).join('');
+}
+
+function selectAsset(id) {
+    const row = allData.find(x => x.id === id);
+    if (!row) return;
+    const panel = document.getElementById('detailPanel');
+    panel.classList.remove('hidden');
+    document.getElementById('detailContent').innerHTML = `
+        <div class="bg-blue-500/10 p-4 rounded-xl">
+            <div class="text-[10px] text-blue-400 font-bold uppercase">ID Externo</div>
+            <div class="text-lg font-black">${row.external}</div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+            <div><div class="text-[10px] text-slate-500 font-bold uppercase">Municipio</div><div>${row.localidad}</div></div>
+            <div><div class="text-[10px] text-slate-500 font-bold uppercase">Zona</div><div>${row.zona}</div></div>
+        </div>
+        <div class="bg-slate-800 p-3 rounded-lg">
+            <div class="text-[10px] text-slate-500 font-bold mb-1">Situación Actual</div>
+            <div class="text-xs text-lime-400 font-bold">${row.situacion}</div>
+        </div>
+        <div><div class="text-[10px] text-slate-500 font-bold uppercase">Cuenta</div><div class="font-mono">${row.cuenta}</div></div>
+        <button onclick="map.flyTo([${row.lat}, ${row.lng}], 18)" class="btn-primary w-full py-3 rounded-xl mt-4">VER EN MAPA 📍</button>
+    `;
+}
+
+function updateSitLegend() {
+    const counts = {};
+    filteredData.forEach(d => { counts[d.situacion] = (counts[d.situacion] || 0) + 1; });
+    document.getElementById('legendSituaciones').innerHTML = Object.entries(counts).sort((a,b) => b[1] - a[1]).map(([sit, count]) => `
+        <div class="legend-item"><span class="legend-dot-sit"></span><span class="text-slate-300 flex-1">${sit}</span><span class="font-bold">${count}</span></div>
+    `).join('');
+}
+
+function populateFilters() {
+    const getU = (f) => [...new Set(allData.map(d => d[f]))].filter(x => x && x !== '-').sort();
+    const fill = (id, list) => {
+        const sel = document.getElementById(id);
+        sel.innerHTML = `<option value="all">TODAS</option>` + list.map(x => `<option value="${x}">${x}</option>`).join('');
+    };
+    fill('localidadFilter', getU('localidad'));
+    fill('zonaFilter', getU('zona'));
+    fill('tipoFallaFilter', [...new Set(allData.map(d => d.categoria.name))].sort());
+    fill('situacionFilter', getU('situacion'));
+    fill('cuentaFilter', getU('cuenta'));
+}
+
+function exportToPDF() {
+    if (filteredData.length === 0) return;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('landscape');
+    doc.text("REPORTE DE FALLAS ALUMBRADO IMC", 14, 15);
+    const tableData = filteredData.map((d, i) => [i+1, d.external, d.localidad, d.zona, d.categoria.name, d.situacion, d.cuenta]);
+    doc.autoTable({ head: [['#', 'ID', 'Municipio', 'Zona', 'Falla', 'Situación', 'Cuenta']], body: tableData, startY: 20, styles: { fontSize: 7 } });
+    doc.save(`Fallas_Alumbrado_IMC.pdf`);
+}
+
+function updateCharts() {
+    const munStats = {};
+    filteredData.forEach(d => {
+        if (!munStats[d.localidad]) munStats[d.localidad] = 0;
+        munStats[d.localidad]++;
+    });
+    document.getElementById('municipioStatsBody').innerHTML = Object.entries(munStats).sort((a,b) => b[1] - a[1]).map(([l, c]) => `<tr><td>${l}</td><td class="font-bold">${c}</td></tr>`).join('');
+    
+    const errCounts = {};
+    filteredData.forEach(d => errCounts[d.categoria.name] = (errCounts[d.categoria.name] || 0) + 1);
+    const canvas = document.getElementById('chartErrorTypes');
+    if (Chart.getChart(canvas)) Chart.getChart(canvas).destroy();
+    new Chart(canvas, { type: 'pie', data: { labels: Object.keys(errCounts), datasets: [{ data: Object.values(errCounts), backgroundColor: Object.keys(errCounts).map(n => FALLA_TYPES[n] || '#64748b') }] } });
+
+    const groupedCue = {};
+    filteredData.forEach(d => { if (d.cuenta !== '-') { groupedCue[d.cuenta] = (groupedCue[d.cuenta] || 0) + 1; } });
+    document.getElementById('groupedCuentasBody').innerHTML = Object.entries(groupedCue).sort((a,b) => b[1] - a[1]).map(([n, c]) => `<tr><td>${n}</td><td>${c}</td><td><button onclick="verCuenta('${n}')" class="text-blue-500">Ver</button></td></tr>`).join('');
+}
+
+function verCuenta(num) { const pts = filteredData.filter(d => d.cuenta === num); closeChartsModal(); map.fitBounds(pts.map(p => [p.lat, p.lng]), {padding:[50,50]}); }
+function openChartsModal() { document.getElementById('chartsModal').classList.remove('hidden'); updateCharts(); }
+function closeChartsModal() { document.getElementById('chartsModal').classList.add('hidden'); }
+function closeDetailPanel() { document.getElementById('detailPanel').classList.add('hidden'); }
+function showToast(m) { const t = document.createElement('div'); t.className='toast'; t.textContent=m; document.body.appendChild(t); setTimeout(()=>t.remove(), 3000); }
+
+document.getElementById('searchInput').addEventListener('input', applyFilters);
+document.getElementById('localidadFilter').addEventListener('change', applyFilters);
+document.getElementById('zonaFilter').addEventListener('change', applyFilters);
+document.getElementById('tipoFallaFilter').addEventListener('change', applyFilters);
+document.getElementById('situacionFilter').addEventListener('change', applyFilters);
+document.getElementById('cuentaFilter').addEventListener('change', applyFilters);
+
+window.onload = () => { const s = sessionStorage.getItem('imc_session'); if (s) enterApp(JSON.parse(s)); };
+</script>
+</body>
+</html>
