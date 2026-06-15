@@ -88,12 +88,12 @@
     .view-list { display: flex; }
     .view-map { display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 10; }
     .view-detail { display: none; }
-    body.show-map .view-list { display: none; }
-    body.show-map .view-map { display: block; }
-    body.show-map .view-detail { display: none; }
-    body.show-detail .view-list { display: none; }
-    body.show-detail .view-map { display: none; }
-    body.show-detail .view-detail { display: flex; }
+    body.show-map .view-list { display: none !important; }
+    body.show-map .view-map { display: block !important; }
+    body.show-map .view-detail { display: none !important; }
+    body.show-detail .view-list { display: none !important; }
+    body.show-detail .view-map { display: none !important; }
+    body.show-detail .view-detail { display: flex !important; }
     .mobile-view-btns { display: flex !important; }
     .desktop-only { display: none !important; }
     #headerTitle { font-size: 14px !important; }
@@ -130,9 +130,6 @@
   
   .btn-ver-mapa { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
   .btn-ver-mapa:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }
-
-  /* Hidden canvas for high-quality export */
-  #exportCanvas { display: none; }
 </style>
 </head>
 <body class="h-screen flex flex-col">
@@ -155,7 +152,7 @@
           <input type="password" id="password" class="login-input w-full" placeholder="Ingrese su contraseña" autocomplete="current-password" required>
         </div>
         <div id="errorMessage" class="error-message">⚠️ Usuario o contraseña incorrectos</div>
-        <button type="submit" class="btn-primary w-full py-3 px-4 rounded-lg text-white font-semibold text-base shadow-lg mt-6"> Ingresar al Sistema</button>
+        <button type="submit" class="btn-primary w-full py-3 px-4 rounded-lg text-white font-semibold text-base shadow-lg mt-6">🔐 Ingresar al Sistema</button>
       </div>
     </form>
   </div>
@@ -316,7 +313,7 @@
         <div class="chart-container"><canvas id="chartZonas"></canvas></div>
       </div>
       <div class="chart-card">
-        <h3> Evolución de Fallas (Últimos 30 días)</h3>
+        <h3>📅 Evolución de Fallas (Últimos 30 días)</h3>
         <div class="chart-container"><canvas id="chartTimeline"></canvas></div>
       </div>
       <div class="chart-card">
@@ -332,9 +329,6 @@
     </div>
   </div>
 </div>
-
-<!-- Hidden canvas for high-quality chart export -->
-<canvas id="exportCanvas" width="1200" height="600"></canvas>
 
 <!-- Toast Container -->
 <div id="toastContainer"></div>
@@ -450,10 +444,15 @@
       </div>
     </main>
 
-    <aside id="detailPanel" class="detail-panel-mobile glass border-l border-slate-700/50 flex flex-col relative z-10 view-detail hidden">
+    <aside id="detailPanel" class="detail-panel-mobile glass border-l border-slate-700/50 flex-col relative z-10 view-detail" style="display: none;">
       <div class="p-4 border-b border-slate-700/50 flex items-center justify-between">
-        <h2 class="font-bold text-white flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-blue-500 pulse-dot"></span>Detalle del Asset</h2>
-        <button onclick="closeDetailPanel()" class="text-slate-400 hover:text-white transition"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+        <h2 class="font-bold text-white flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-blue-500 pulse-dot"></span>
+          Detalle del Asset
+        </h2>
+        <button onclick="closeDetailPanel()" class="text-slate-400 hover:text-white transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
       </div>
       <div class="flex-1 scroll-y p-4 space-y-4" id="detailContent"></div>
     </aside>
@@ -461,7 +460,7 @@
 
   <div class="mobile-view-btns">
     <button class="mobile-view-btn active" onclick="switchView('list')" id="btnViewList"><span class="icon">📋</span>Lista</button>
-    <button class="mobile-view-btn" onclick="switchView('map')" id="btnViewMap"><span class="icon">️</span>Mapa</button>
+    <button class="mobile-view-btn" onclick="switchView('map')" id="btnViewMap"><span class="icon">🗺️</span>Mapa</button>
     <button class="mobile-view-btn" onclick="switchView('detail')" id="btnViewDetail"><span class="icon">📄</span>Detalle</button>
   </div>
 </div>
@@ -483,6 +482,15 @@ function switchView(view) {
   if (view !== 'list') document.body.classList.add('show-' + view);
   document.querySelectorAll('.mobile-view-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('btnView' + view.charAt(0).toUpperCase() + view.slice(1)).classList.add('active');
+  
+  // Forzar visibilidad del panel de detalle en móvil
+  const detailPanel = document.getElementById('detailPanel');
+  if (view === 'detail') {
+    detailPanel.style.display = 'flex';
+  } else {
+    detailPanel.style.display = 'none';
+  }
+  
   if (view === 'map' && map) {
     setTimeout(() => { map.invalidateSize(); if (filteredData && filteredData.length > 0) renderMarkers(filteredData); }, 100);
   }
@@ -601,7 +609,7 @@ function confirmDeleteUser() {
   if (!deleteTargetUsername) return;
   users = users.filter(u => u.username !== deleteTargetUsername);
   saveUsersToStorage();
-  showToast(`️ Usuario "${deleteTargetUsername}" eliminado`, 'success');
+  showToast(`🗑️ Usuario "${deleteTargetUsername}" eliminado`, 'success');
   closeDeleteModal();
   renderUserList();
 }
@@ -612,7 +620,7 @@ function handleAddUser() {
   const password = document.getElementById('newPassword').value;
   const role = document.getElementById('newRole').value;
   if (!username || !password) { showToast('⚠️ Complete todos los campos', 'warning'); return; }
-  if (users.find(u => u.username === username)) { showToast('️ El usuario ya existe', 'warning'); return; }
+  if (users.find(u => u.username === username)) { showToast('⚠️ El usuario ya existe', 'warning'); return; }
   users.push({ username, password, role });
   saveUsersToStorage();
   document.getElementById('newUsername').value = '';
@@ -647,7 +655,7 @@ function handleChangeOwnPassword() {
   if (user.password !== currentPass) { msg.textContent = '❌ La contraseña actual es incorrecta.'; msg.className = 'text-sm text-red-400'; return; }
   if (newPass.length < 4) { msg.textContent = '⚠️ Mínimo 4 caracteres.'; msg.className = 'text-sm text-yellow-400'; return; }
   if (newPass !== confirmPass) { msg.textContent = '❌ Las contraseñas no coinciden.'; msg.className = 'text-sm text-red-400'; return; }
-  if (newPass === currentPass) { msg.textContent = '️ Debe ser diferente a la actual.'; msg.className = 'text-sm text-yellow-400'; return; }
+  if (newPass === currentPass) { msg.textContent = '⚠️ Debe ser diferente a la actual.'; msg.className = 'text-sm text-yellow-400'; return; }
   user.password = newPass;
   saveUsersToStorage();
   msg.textContent = '✅ Contraseña actualizada.';
@@ -846,7 +854,6 @@ function updateCharts() {
     const lat = row.lat ? row.lat.toFixed(6) : '-';
     const lng = row.lng ? row.lng.toFixed(6) : '-';
     const assetId = row['Asset ID'] || '';
-    const btnId = `btn-mapa-${idx}`;
     
     tableHTML += `
       <tr>
@@ -857,7 +864,7 @@ function updateCharts() {
         <td class="font-mono text-xs">${lat}</td>
         <td class="font-mono text-xs">${lng}</td>
         <td>
-          <button id="${btnId}" class="btn-ver-mapa" onclick="verPuntoEnMapa('${assetId}', ${row.lat || 0}, ${row.lng || 0})">
+          <button class="btn-ver-mapa" onclick="verPuntoEnMapa('${assetId}', ${row.lat || 0}, ${row.lng || 0})">
             📍 Ver
           </button>
         </td>
@@ -920,7 +927,6 @@ async function exportChartsPDF() {
     const margin = 10;
     let yPosition = margin;
 
-    // Título
     pdf.setFillColor(30, 41, 59);
     pdf.rect(0, 0, pageWidth, 25, 'F');
     pdf.setTextColor(255, 255, 255);
@@ -933,7 +939,6 @@ async function exportChartsPDF() {
 
     yPosition = 35;
 
-    // Resumen de filtros
     const filters = [];
     const locFilter = document.getElementById('localidadFilter').value;
     const zonaFilter = document.getElementById('zonaFilter').value;
@@ -953,7 +958,6 @@ async function exportChartsPDF() {
       yPosition += 8;
     }
 
-    // Estadísticas generales
     pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(10);
     pdf.setFont(undefined, 'bold');
@@ -963,7 +967,6 @@ async function exportChartsPDF() {
     pdf.text(`OLC Inaccesible: ${filteredData.filter(d => d.categoria.name === 'OLC inaccesible').length}`, margin + 180, yPosition);
     yPosition += 15;
 
-    // Lista de gráficos a exportar
     const chartList = [
       { id: 'chartErrorTypes', title: 'Distribución por Tipo de Falla', width: 120, height: 60 },
       { id: 'chartSituaciones', title: 'Distribución por Situación', width: 120, height: 60 },
@@ -973,30 +976,15 @@ async function exportChartsPDF() {
       { id: 'chartCriticas', title: 'Fallas Críticas por Localidad', width: 120, height: 60 }
     ];
 
-    // Canvas temporal para alta calidad
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    
-    // Resolución alta para calidad
-    const scaleFactor = 3;
-    tempCanvas.width = 800 * scaleFactor;
-    tempCanvas.height = 400 * scaleFactor;
-    tempCtx.scale(scaleFactor, scaleFactor);
-
     for (let i = 0; i < chartList.length; i++) {
       const chartInfo = chartList[i];
       const chart = charts[chartInfo.id.replace('chart', '').charAt(0).toLowerCase() + chartInfo.id.replace('chart', '').slice(1)];
       if (!chart) continue;
       
-      // Re-renderizar en canvas temporal para alta calidad
       const originalCanvas = chart.canvas;
       const originalWidth = originalCanvas.width;
       const originalHeight = originalCanvas.height;
       
-      // Guardar estado original
-      const originalData = chart.toBase64Image();
-      
-      // Crear gráfico temporal de alta resolución
       const tempChartCanvas = document.createElement('canvas');
       tempChartCanvas.width = originalWidth * 2;
       tempChartCanvas.height = originalHeight * 2;
@@ -1022,34 +1010,25 @@ async function exportChartsPDF() {
         }
       });
 
-      // Forzar renderizado
       tempChart.render();
-      
-      // Obtener imagen de alta calidad
       const highQualityImg = tempChartCanvas.toDataURL('image/png', 1.0);
-      
-      // Limpiar
       tempChart.destroy();
       
-      // Verificar si necesitamos nueva página
       if (yPosition + 75 > pageHeight - 10) {
         pdf.addPage();
         yPosition = margin;
       }
       
-      // Título del gráfico
       pdf.setTextColor(30, 41, 59);
       pdf.setFontSize(12);
       pdf.setFont(undefined, 'bold');
       pdf.text(chartInfo.title, margin, yPosition);
       yPosition += 5;
       
-      // Agregar imagen del gráfico con dimensiones apropiadas
       pdf.addImage(highQualityImg, 'PNG', margin, yPosition, chartInfo.width, chartInfo.height);
       yPosition += chartInfo.height + 10;
     }
 
-    // Tabla de cuentas con número de cuenta
     const cuentaCounts = {};
     filteredData.forEach(row => {
       const cuenta = (row['Número de Cuenta'] || '').trim();
@@ -1385,7 +1364,7 @@ function renderList() {
       </div>
       <div class="text-sm font-semibold text-white mb-1 truncate">${row['External ID']}</div>
       <div class="text-xs text-slate-300 line-clamp-2">${row['Mensaje de error']}</div>
-      ${situacion ? `<div class="text-xs text-amber-400 mt-1.5 italic flex items-center gap-1"><span></span><span class="truncate">${situacion}</span></div>` : ''}
+      ${situacion ? `<div class="text-xs text-amber-400 mt-1.5 italic flex items-center gap-1"><span>📌</span><span class="truncate">${situacion}</span></div>` : ''}
       ${cuenta && cuenta !== '-' ? `<div class="text-xs text-rose-400 mt-1 flex items-center gap-1"><span>💳</span><span class="font-semibold">Cuenta: ${cuenta}</span></div>` : ''}
       <div class="flex items-center gap-2 mt-2"><span class="text-xs text-slate-400">Zona: <span class="text-slate-200 font-semibold">${row.zona}</span></span></div>
     </div>
@@ -1395,8 +1374,8 @@ function renderList() {
 function selectAsset(row) {
   currentSelected = row;
   const panel = document.getElementById('detailPanel');
-  panel.classList.remove('hidden');
-  panel.classList.add('fade-in');
+  
+  // Generar contenido del detalle
   const allErrorsForAsset = allData.filter(d => d['Asset ID'] === row['Asset ID']);
   const situacion = row['Situación'] || '';
   const cuenta = row['Número de Cuenta'] || '';
@@ -1439,20 +1418,46 @@ function selectAsset(row) {
       ${allErrorsForAsset.length > 1 ? `<div class="glass rounded-lg p-4"><div class="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Todas las fallas de este asset (${allErrorsForAsset.length})</div><div class="space-y-2">${allErrorsForAsset.map(e => `<div class="flex items-start gap-2 text-xs p-2 rounded bg-slate-800/50"><span>${e.categoria.icon}</span><div class="flex-1"><div class="font-semibold" style="color:${e.categoria.color}">${e.categoria.name}</div><div class="text-slate-400">${e['Fecha creación']}</div></div></div>`).join('')}</div></div>` : ''}
     </div>
   `;
+  
+  // Forzar visibilidad del panel en móvil
+  if (window.innerWidth <= 1024) {
+    panel.style.display = 'flex';
+    document.body.className = document.body.className.replace(/show-\w+/g, '').trim();
+    document.body.classList.add('show-detail');
+    document.querySelectorAll('.mobile-view-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('btnViewDetail').classList.add('active');
+  } else {
+    panel.classList.remove('hidden');
+    panel.classList.add('fade-in');
+  }
+  
   renderList();
-  if (window.innerWidth <= 1024) switchView('detail');
 }
 
 function closeDetailPanel() { 
-  document.getElementById('detailPanel').classList.add('hidden'); 
+  const panel = document.getElementById('detailPanel');
+  if (window.innerWidth <= 1024) {
+    panel.style.display = 'none';
+    document.body.className = document.body.className.replace(/show-\w+/g, '').trim();
+    document.querySelectorAll('.mobile-view-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('btnViewList').classList.add('active');
+  } else {
+    panel.classList.add('hidden');
+  }
   currentSelected = null; 
   renderList();
-  if (window.innerWidth <= 1024) switchView('list');
 }
 
 function flyToAsset(lat, lng) { 
   if (map) map.flyTo([lat, lng], 16, { duration: 1.5 });
-  if (window.innerWidth <= 1024) switchView('map');
+  if (window.innerWidth <= 1024) {
+    const panel = document.getElementById('detailPanel');
+    panel.style.display = 'none';
+    document.body.className = document.body.className.replace(/show-\w+/g, '').trim();
+    document.body.classList.add('show-map');
+    document.querySelectorAll('.mobile-view-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('btnViewMap').classList.add('active');
+  }
 }
 
 function applyFilters() {
